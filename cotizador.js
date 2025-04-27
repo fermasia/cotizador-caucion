@@ -827,6 +827,7 @@ async function exportToPDF() {
     
     // Línea separadora
     doc.setDrawColor(...secondaryColor);
+    doc.setLineWidth(0.2);
     doc.line(margins.logo.x, y + 3, 190, y + 3);
     
     // Tabla de resultados con ajustes para mobile
@@ -1422,29 +1423,65 @@ function initializeFields() {
             document.getElementById('stamps-percentage').value = cotizadorData.sellados[jurisdiccion];
         }
         
-        // Inicializar campos de valores monetarios
+        // Inicializar campos de valores monetarios según la moneda
         const currency = document.getElementById('currency').value;
         console.log('Moneda seleccionada:', currency);
         
         if (currency) {
-            console.log('Derecho de emisión para la moneda:', selectedCompany.derecho_emision[currency]);
+            let exchangeRate = 1; // Por defecto para ARS
             
-            // Inicializar derecho de emisión
-            const emissionRightValue = selectedCompany.derecho_emision[currency];
-            document.getElementById('emission-right-value').value = emissionRightValue;
-            
-            // Inicializar el valor de escribanía según el tipo seleccionado
-            const notaryType = document.getElementById('notary-type').value;
-            if (notaryType === 'Escribano Solo') {
-                document.getElementById('notary-value').value = selectedCompany.escribano_solo[currency];
-            } else if (notaryType === 'Escribano+Colegio') {
-                document.getElementById('notary-value').value = selectedCompany.escribano_colegio[currency];
-            } else {
-                document.getElementById('notary-value').value = '0';
+            // Si es USD o EUR, obtener el tipo de cambio
+            if (currency !== 'ARS') {
+                const exchangeRateValue = parseFloat(document.getElementById('exchange-rate').value);
+                if (!isNaN(exchangeRateValue) && exchangeRateValue > 0) {
+                    exchangeRate = exchangeRateValue;
+                }
             }
+            
+            // Calcular derecho de emisión
+            let emissionRightValue;
+            if (currency === 'ARS') {
+                emissionRightValue = selectedCompany.derecho_emision.ARS;
+            } else {
+                // Convertir el valor de ARS a la moneda seleccionada
+                emissionRightValue = selectedCompany.derecho_emision.ARS / exchangeRate;
+            }
+            document.getElementById('emission-right-value').value = emissionRightValue.toFixed(2);
+            
+            // Calcular valor de escribanía según el tipo seleccionado
+            const notaryType = document.getElementById('notary-type').value;
+            let notaryValue = 0;
+            
+            if (notaryType === 'Escribano Solo') {
+                notaryValue = currency === 'ARS' ? 
+                    selectedCompany.escribano_solo.ARS : 
+                    selectedCompany.escribano_solo.ARS / exchangeRate;
+            } else if (notaryType === 'Escribano+Colegio') {
+                notaryValue = currency === 'ARS' ? 
+                    selectedCompany.escribano_colegio.ARS : 
+                    selectedCompany.escribano_colegio.ARS / exchangeRate;
+            }
+            
+            document.getElementById('notary-value').value = notaryValue.toFixed(2);
+            
+            console.log('Valores inicializados:', {
+                currency,
+                exchangeRate,
+                emissionRightValue,
+                notaryValue,
+                notaryType
+            });
         }
     }
     
     // Marcar cambios como pendientes después de la inicialización
     markChangesPending();
 }
+
+// Agregar event listeners para reinicializar cuando cambie la compañía o la moneda
+document.getElementById('company').addEventListener('change', initializeFields);
+document.getElementById('currency').addEventListener('change', async function() {
+    await toggleExchangeRate();
+    initializeFields();
+});
+document.getElementById('notary-type').addEventListener('change', initializeFields);
