@@ -23,7 +23,7 @@
             --font-titles: 'Manrope', sans-serif;
             --font-form: 'DM Sans', sans-serif;
             --font-numbers: 'Space Grotesk', sans-serif;
-            --font-base: 'Inter', sans-serif;
+            --font-base: 'DM Sans', sans-serif;
         }
         
         * {
@@ -98,8 +98,9 @@
         #stamps-result,
         #vat-result,
         #total-taxes-result,
-        #final-prize-result {
-            font-family: var(--font-numbers);
+        #final-prize-result,
+        .amount, .importe {
+            font-family: var(--font-numbers) !important;
         }
         
         .edit-companies-container {
@@ -533,25 +534,140 @@
             }
             
             header {
-                flex-direction: column;
+                grid-template-columns: 1fr;
                 text-align: center;
+                gap: 10px;
+                padding: 10px;
+            }
+
+            .logo-container {
+                max-width: 120px;
+                margin: 0 auto;
             }
             
-            .logo-container {
-                margin-bottom: 10px;
+            header h1 {
+                font-size: 1.1rem;
+                line-height: 1.3;
+                margin: 5px 0;
             }
             
             .edit-companies-container {
-                position: static;
-                margin-top: 10px;
+                display: flex;
+                flex-direction: row;
+                justify-content: center;
+                gap: 10px;
+                margin-top: 5px;
             }
-            
+
+            .btn-edit-companies {
+                width: auto;
+                padding: 5px 10px;
+                font-size: 0.9rem;
+            }
+
+            /* Ajustes para modales en mobile */
+            .modal-content {
+                margin: 0;
+                padding: 15px;
+                width: 100%;
+                height: 100%;
+                max-height: 100vh;
+                border-radius: 0;
+            }
+
+            .modal-content h2 {
+                font-size: 1.2rem;
+                margin-bottom: 15px;
+            }
+
+            .companies-table,
+            .tax-table,
+            .stamps-table {
+                font-size: 0.9rem;
+            }
+
+            .companies-table th,
+            .companies-table td,
+            .tax-table th,
+            .tax-table td,
+            .stamps-table th,
+            .stamps-table td {
+                padding: 6px 4px;
+            }
+
+            .companies-table input[type="number"],
+            .tax-table input[type="number"],
+            .stamps-table input[type="number"] {
+                width: 80px;
+                font-size: 0.9rem;
+                padding: 4px;
+            }
+
+            .companies-table th:first-child,
+            .companies-table td:first-child {
+                width: auto;
+                min-width: 120px;
+            }
+
+            .modal-buttons {
+                flex-direction: column;
+                gap: 8px;
+            }
+
+            .modal-buttons button {
+                width: 100%;
+                height: 36px;
+                font-size: 0.9rem;
+            }
+
+            .stamps-table-container {
+                max-height: 50vh;
+            }
+
+            /* Ajustes para tablas horizontales en mobile */
+            .companies-table-container {
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+                margin: 0 -15px;
+                padding: 0 15px;
+            }
+
             .companies-table {
-                font-size: 12px;
+                min-width: 800px; /* Asegurar que la tabla sea scrolleable */
             }
-            
-            .companies-table th, .companies-table td {
-                padding: 5px;
+
+            /* Ajustes para el cierre del modal */
+            .close {
+                position: absolute;
+                right: 15px;
+                top: 10px;
+                font-size: 24px;
+            }
+
+            /* Ajustes para inputs y selects en mobile */
+            input, select {
+                font-size: 16px; /* Prevenir zoom en iOS */
+                padding: 8px;
+            }
+
+            .result-inputs input {
+                width: 70px;
+                font-size: 0.9rem;
+            }
+
+            /* Ajustes para la sección de resultados en mobile */
+            .result-item {
+                font-size: 0.9rem;
+                padding: 6px 0;
+            }
+
+            .result-label {
+                font-size: 0.9rem;
+            }
+
+            .result-value {
+                font-size: 0.9rem;
+                min-width: 80px;
             }
         }
     
@@ -837,7 +953,7 @@ input[type="number"] {
 <div class="main-content">
 <section class="input-section">
 <div class="section-title-container">
-    <h2 class="section-title">Datos para cotizar</h2>
+<h2 class="section-title">Datos para cotizar</h2>
     <span class="changes-pending" id="changes-pending">Hay cambios pendientes de calcular</span>
 </div>
 <div class="form-group">
@@ -850,14 +966,14 @@ input[type="number"] {
 <div class="form-group">
 <div class="currency-row">
     <div class="currency-select-container">
-        <label for="currency">Moneda:</label>
-        <select id="currency" name="currency">
+<label for="currency">Moneda:</label>
+<select id="currency" name="currency">
             <option value="" disabled selected hidden>Seleccione una moneda</option>
-            <option value="ARS">ARS</option>
-            <option value="USD">USD</option>
-            <option value="EUR">EUR</option>
-        </select>
-        <div class="error-message" id="currency-error">Por favor seleccione una moneda</div>
+<option value="ARS">ARS</option>
+<option value="USD">USD</option>
+<option value="EUR">EUR</option>
+</select>
+<div class="error-message" id="currency-error">Por favor seleccione una moneda</div>
     </div>
     <div class="exchange-rate-container" id="exchange-rate-container">
         <label for="exchange-rate">Tipo de Cambio ARS:</label>
@@ -919,87 +1035,87 @@ input[type="number"] {
 </section>
 <section class="results-section">
 <div class="section-title-container">
-    <h2 class="section-title">Cálculo</h2>
+<h2 class="section-title">Cálculo</h2>
 </div>
 <div id="results-container">
 <div class="result-item">
-    <span class="result-label">Prima:</span>
-    <span class="result-value" id="premium-result">$0.00</span>
+<span class="result-label">Prima:</span>
+<span class="result-value" id="premium-result">$0.00</span>
 </div>
 <div class="result-item">
-    <span class="result-label">Derecho de Emisión:</span>
+<span class="result-label">Derecho de Emisión:</span>
     <div class="result-inputs" data-symbol="$">
         <input type="number" id="emission-right-value" step="0.01" onchange="markChangesPending()">
     </div>
-    <span class="result-value" id="emission-right-result">$0.00</span>
+<span class="result-value" id="emission-right-result">$0.00</span>
 </div>
 <div class="result-item">
-    <span class="result-label">Escribanía / Colegio:</span>
+<span class="result-label">Escribanía / Colegio:</span>
     <div class="result-inputs" data-symbol="$">
         <input type="number" id="notary-value" step="0.01" onchange="markChangesPending()">
     </div>
-    <span class="result-value" id="notary-result">$0.00</span>
+<span class="result-value" id="notary-result">$0.00</span>
 </div>
 <div class="result-item">
-    <span class="result-label">Impuesto País:</span>
+<span class="result-label">Impuesto País:</span>
     <div class="result-inputs" data-symbol="%">
         <input type="number" id="country-tax-percentage" step="0.01" onchange="markChangesPending()">
     </div>
-    <span class="result-value" id="country-tax-result">$0.00</span>
+<span class="result-value" id="country-tax-result">$0.00</span>
 </div>
 <div class="result-item">
-    <span class="result-label">Recargo Administrativo:</span>
+<span class="result-label">Recargo Administrativo:</span>
     <div class="result-inputs" data-symbol="%">
         <input type="number" id="administrative-surcharge-percentage" step="0.01" onchange="markChangesPending()">
     </div>
-    <span class="result-value" id="administrative-surcharge-result">$0.00</span>
+<span class="result-value" id="administrative-surcharge-result">$0.00</span>
 </div>
 <div class="result-item">
-    <span class="result-label">Subtotal:</span>
-    <span class="result-value" id="subtotal-result">$0.00</span>
+<span class="result-label">Subtotal:</span>
+<span class="result-value" id="subtotal-result">$0.00</span>
 </div>
 <div class="result-item">
-    <span class="result-label">Intereses Internos:</span>
+<span class="result-label">Intereses Internos:</span>
     <div class="result-inputs" data-symbol="%">
         <input type="number" id="internal-interest-percentage" step="0.01" onchange="markChangesPending()">
     </div>
-    <span class="result-value" id="internal-interest-result">$0.00</span>
+<span class="result-value" id="internal-interest-result">$0.00</span>
 </div>
 <div class="result-item">
-    <span class="result-label">Tasa SSN:</span>
+<span class="result-label">Tasa SSN:</span>
     <div class="result-inputs" data-symbol="%">
         <input type="number" id="ssn-rate-percentage" step="0.01" onchange="markChangesPending()">
     </div>
-    <span class="result-value" id="ssn-rate-result">$0.00</span>
+<span class="result-value" id="ssn-rate-result">$0.00</span>
 </div>
 <div class="result-item">
-    <span class="result-label">OSSEG:</span>
+<span class="result-label">OSSEG:</span>
     <div class="result-inputs" data-symbol="%">
         <input type="number" id="osseg-percentage" step="0.01" onchange="markChangesPending()">
     </div>
-    <span class="result-value" id="osseg-result">$0.00</span>
+<span class="result-value" id="osseg-result">$0.00</span>
 </div>
 <div class="result-item">
-    <span class="result-label">Sellos:</span>
+<span class="result-label">Sellos:</span>
     <div class="result-inputs" data-symbol="%">
         <input type="number" id="stamps-percentage" step="0.01" onchange="markChangesPending()">
     </div>
-    <span class="result-value" id="stamps-result">$0.00</span>
+<span class="result-value" id="stamps-result">$0.00</span>
 </div>
 <div class="result-item">
-    <span class="result-label">IVA:</span>
+<span class="result-label">IVA:</span>
     <div class="result-inputs" data-symbol="%">
         <input type="number" id="vat-percentage" step="0.01" onchange="markChangesPending()">
     </div>
-    <span class="result-value" id="vat-result">$0.00</span>
+<span class="result-value" id="vat-result">$0.00</span>
 </div>
 <div class="result-item">
-    <span class="result-label">Total Impuestos:</span>
-    <span class="result-value" id="total-taxes-result">$0.00</span>
+<span class="result-label">Total Impuestos:</span>
+<span class="result-value" id="total-taxes-result">$0.00</span>
 </div>
 <div class="result-item">
-    <span class="result-label">Premio Final:</span>
-    <span class="result-value" id="final-prize-result">$0.00</span>
+<span class="result-label">Premio Final:</span>
+<span class="result-value" id="final-prize-result">$0.00</span>
 </div>
 </div>
 <button class="btn btn-export" id="export-pdf-btn">Exportar a PDF</button>
@@ -1008,17 +1124,17 @@ input[type="number"] {
 </div>
 <!-- Modal para editar compañías -->
 <div class="modal" id="companies-modal">
-    <div class="modal-content">
-        <span class="close" id="close-companies-modal">×</span>
-        <h2>Editar Compañías</h2>
+<div class="modal-content">
+<span class="close" id="close-companies-modal">×</span>
+<h2>Editar Compañías</h2>
         <div class="modal-buttons">
             <button class="btn-add-company" id="add-company-btn">Agregar Compañía</button>
-            <button class="btn-save-companies" id="save-companies-btn">Guardar Cambios</button>
-        </div>
+<button class="btn-save-companies" id="save-companies-btn">Guardar Cambios</button>
+</div>
         <div class="company-editor">
             <div class="companies-table-container"></div>
         </div>
-    </div>
+</div>
 </div>
 <!-- Cargar jsPDF para la exportación a PDF -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -1030,23 +1146,23 @@ input[type="number"] {
         <span class="close" id="close-taxes-modal">×</span>
         <h2>Editar Impuestos</h2>
         <div class="tax-editor">
-            <div class="tax-form">
-                <table class="tax-table">
-                    <thead>
-                        <tr>
-                            <th>Intereses Internos (%)</th>
-                            <th>Tasa SSN (%)</th>
-                            <th>OSSEG (%)</th>
-                            <th>IVA (%)</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
+<div class="tax-form">
+<table class="tax-table">
+<thead>
+<tr>
+<th>Intereses Internos (%)</th>
+<th>Tasa SSN (%)</th>
+<th>OSSEG (%)</th>
+<th>IVA (%)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
                             <td><input id="tax-intereses-internos" type="number" min="0" step="0.01"/></td>
                             <td><input id="tax-tasa-ssn" type="number" min="0" step="0.01"/></td>
                             <td><input id="tax-osseg" type="number" min="0" step="0.01"/></td>
                             <td><input id="tax-iva" type="number" min="0" step="0.01"/></td>
-                        </tr>
+</tr>
                     </tbody>
                 </table>
 
@@ -1061,9 +1177,9 @@ input[type="number"] {
                         </thead>
                         <tbody id="stamps-table-body">
                             <!-- Se llenará dinámicamente -->
-                        </tbody>
-                    </table>
-                </div>
+</tbody>
+</table>
+</div>
             </div>
             <div class="modal-buttons">
                 <button class="btn-save-taxes" id="save-taxes-btn">Guardar Cambios</button>

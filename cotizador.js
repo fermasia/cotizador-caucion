@@ -412,16 +412,31 @@ async function toggleExchangeRate() {
     // Obtener el tipo de cambio según la moneda seleccionada
     if (currency === 'USD' || currency === 'EUR') {
         try {
-            const apiUrl = currency === 'USD' 
-                ? 'https://dolarapi.com/v1/dolares/oficial'
-                : 'https://dolarapi.com/v1/cotizaciones/eur';
+            const response = await fetch('https://r.jina.ai/https://www.bna.com.ar/Personas', {
+                headers: {
+                    'Authorization': 'Bearer jina_25ee900d2acf4a7cbb1110305f362af4xgQE8x4yHrkGItAAICF9rGobrQ1F',
+                    'X-Return-Format': 'markdown'
+                }
+            });
             
-            const response = await fetch(apiUrl);
             if (response.ok) {
-                const data = await response.json();
-                if (data && data.venta) {
-                    exchangeRateInput.value = data.venta;
-                    exchangeRateContainer.classList.remove('warning');
+                const markdown = await response.text();
+                // Buscar la línea que contiene la moneda seleccionada
+                const currencyPattern = currency === 'USD' 
+                    ? /\| Dolar U\.S\.A \| \d+,\d+ \| (\d+,\d+) \|/
+                    : /\| Euro \| \d+,\d+ \| (\d+,\d+) \|/;
+                
+                const match = markdown.match(currencyPattern);
+                if (match && match[1]) {
+                    // Convertir el valor de formato "1.234,56" a "1234.56"
+                    const exchangeRate = parseFloat(match[1].replace('.', '').replace(',', '.'));
+                    if (!isNaN(exchangeRate) && exchangeRate > 0) {
+                        exchangeRateInput.value = exchangeRate;
+                        exchangeRateContainer.classList.remove('warning');
+                    } else {
+                        exchangeRateInput.value = '';
+                        exchangeRateContainer.classList.add('warning');
+                    }
                 } else {
                     exchangeRateInput.value = '';
                     exchangeRateContainer.classList.add('warning');
@@ -677,7 +692,6 @@ function calculateQuote() {
 
 // Exportar a PDF
 async function exportToPDF() {
-    // Verificar si hay una cotización actual
     const currentQuoteStr = sessionStorage.getItem('currentQuote');
     if (!currentQuoteStr) {
         alert('Debe calcular una cotización antes de exportar a PDF');
@@ -693,14 +707,19 @@ async function exportToPDF() {
         unit: 'mm',
         format: 'a4'
     });
-
+    
     // Configurar fuentes y colores
-    const primaryColor = [30, 53, 100]; // Azul marino Sirius
-    const secondaryColor = [128, 128, 128]; // Gris para textos secundarios
-    const accentColor = [15, 27, 50]; // Azul más oscuro para detalles
+    const primaryColor = [30, 53, 100];
+    const secondaryColor = [128, 128, 128];
+    const accentColor = [15, 27, 50];
+
+    // Detectar si estamos en mobile
+    const isMobile = window.innerWidth <= 768;
+    const logoSize = isMobile ? { width: 40, height: 16 } : { width: 50, height: 20 };
+    const fontSize = isMobile ? { title: 18, subtitle: 10, text: 8 } : { title: 24, subtitle: 12, text: 10 };
 
     try {
-        // Agregar logo de manera asíncrona
+        // Agregar logo
         const img = document.querySelector('.logo-container img');
         if (img && img.complete) {
             try {
@@ -710,7 +729,7 @@ async function exportToPDF() {
                 canvas.height = img.naturalHeight;
                 ctx.drawImage(img, 0, 0);
                 const imgData = canvas.toDataURL('image/png');
-                doc.addImage(imgData, 'PNG', 20, 15, 50, 20);
+                doc.addImage(imgData, 'PNG', 20, 15, logoSize.width, logoSize.height);
             } catch (e) {
                 console.warn('No se pudo agregar el logo:', e);
             }
@@ -720,37 +739,37 @@ async function exportToPDF() {
     }
 
     // Título del documento
-    doc.setFontSize(24);
+    doc.setFontSize(fontSize.title);
     doc.setTextColor(...primaryColor);
-    doc.text('COTIZACIÓN DE SEGURO DE CAUCIÓN', 105, 30, { align: 'center' });
-
+    doc.text('COTIZACIÓN DE SEGURO DE CAUCIÓN', 105, isMobile ? 25 : 30, { align: 'center' });
+    
     // Línea decorativa
     doc.setDrawColor(...primaryColor);
     doc.setLineWidth(0.5);
-    doc.line(20, 35, 190, 35);
+    doc.line(20, isMobile ? 30 : 35, 190, isMobile ? 30 : 35);
 
     // Información del documento
-    doc.setFontSize(10);
+    doc.setFontSize(fontSize.text);
     doc.setTextColor(...secondaryColor);
     const today = new Date();
-    doc.text(`Fecha de emisión: ${today.toLocaleDateString()}`, 20, 45);
-    doc.text(`Cotización N°: ${Math.floor(Math.random() * 1000000).toString().padStart(6, '0')}`, 20, 50);
+    const yPos = isMobile ? 35 : 45;
+    doc.text(`Fecha de emisión: ${today.toLocaleDateString()}`, 20, yPos);
+    doc.text(`Cotización N°: ${Math.floor(Math.random() * 1000000).toString().padStart(6, '0')}`, 20, yPos + 5);
     
     // Datos principales de la cotización
-    doc.setFontSize(12);
+    doc.setFontSize(fontSize.subtitle);
     doc.setTextColor(...accentColor);
-    doc.text('DATOS DE LA COTIZACIÓN', 20, 65);
+    doc.text('DATOS DE LA COTIZACIÓN', 20, yPos + 20);
 
     // Línea separadora
     doc.setDrawColor(...secondaryColor);
     doc.setLineWidth(0.2);
-    doc.line(20, 68, 190, 68);
+    doc.line(20, yPos + 23, 190, yPos + 23);
 
-    // Detalles de la cotización en formato de tabla
+    // Detalles de la cotización
     const currency = currentQuote.currency;
     const exchangeRate = sessionStorage.getItem('exchangeRate');
     
-    // Modificar mainData para incluir el tipo de cambio si corresponde
     const mainData = [
         ['Compañía:', currentQuote.company, 'Moneda:', currency + (currency !== 'ARS' ? ` (TC: ${exchangeRate})` : '')],
         ['Suma Asegurada:', formatCurrency(currentQuote.insuredAmount, currency), 'Jurisdicción:', document.getElementById('jurisdiction').value],
@@ -758,23 +777,25 @@ async function exportToPDF() {
         ['Tipo de Certificación:', currentQuote.notaryType, 'Recargo Adm.:', `${currentQuote.administrativeSurchargeAmount.toFixed(2)}%`]
     ];
     
-    doc.setFontSize(10);
-    let y = 75;
+    doc.setFontSize(fontSize.text);
+    let y = yPos + 30;
+    const colWidth = isMobile ? 40 : 50;
+    
     mainData.forEach(row => {
         doc.setTextColor(...secondaryColor);
         doc.text(row[0], 20, y);
         doc.setTextColor(...accentColor);
-        doc.text(row[1], 60, y);
+        doc.text(row[1], 20 + colWidth, y, { maxWidth: 40 });
         doc.setTextColor(...secondaryColor);
         doc.text(row[2], 110, y);
         doc.setTextColor(...accentColor);
-        doc.text(row[3], 150, y);
+        doc.text(row[3], 110 + colWidth, y, { maxWidth: 40 });
         y += 8;
     });
-
+    
     // Título de la sección de resultados
     y += 10;
-    doc.setFontSize(12);
+    doc.setFontSize(fontSize.subtitle);
     doc.setTextColor(...accentColor);
     doc.text('DETALLE DE COSTOS', 20, y);
     
@@ -782,7 +803,7 @@ async function exportToPDF() {
     doc.setDrawColor(...secondaryColor);
     doc.line(20, y + 3, 190, y + 3);
     
-    // Tabla de resultados
+    // Tabla de resultados con ajustes para mobile
     y += 10;
     const resultData = [
         ['CONCEPTO', 'MONTO'],
@@ -809,52 +830,52 @@ async function exportToPDF() {
         headStyles: {
             fillColor: primaryColor,
             textColor: [255, 255, 255],
-            fontSize: 11,
+            fontSize: isMobile ? 9 : 11,
             fontStyle: 'bold',
             halign: 'center'
         },
         columnStyles: {
-            0: { cellWidth: 100 },
-            1: { cellWidth: 70, halign: 'right' }
+            0: { cellWidth: isMobile ? 80 : 100 },
+            1: { cellWidth: isMobile ? 50 : 70, halign: 'right' }
         },
         alternateRowStyles: {
             fillColor: [245, 245, 245]
         },
         bodyStyles: {
-            fontSize: 10,
+            fontSize: isMobile ? 8 : 10,
             textColor: accentColor
         },
         styles: {
-            cellPadding: 5,
-            fontSize: 10,
+            cellPadding: isMobile ? 3 : 5,
+            fontSize: isMobile ? 8 : 10,
             valign: 'middle'
         },
         margin: { left: 20 }
     });
     
     // Pie de página
-    const finalY = doc.lastAutoTable.finalY + 20;
-    doc.setFontSize(8);
+    const finalY = doc.lastAutoTable.finalY + (isMobile ? 15 : 20);
+    doc.setFontSize(isMobile ? 7 : 8);
     doc.setTextColor(...secondaryColor);
     doc.text('IMPORTANTE:', 20, finalY);
-    doc.text('• Esta cotización tiene una validez de 7 días a partir de su fecha de emisión.', 20, finalY + 5);
-    doc.text('• Los valores expresados están sujetos a modificaciones según condiciones específicas de la póliza.', 20, finalY + 10);
-    doc.text('• La presente cotización no implica aceptación del riesgo ni compromiso de emisión por parte de la compañía.', 20, finalY + 15);
+    doc.text('• Esta cotización tiene una validez de 7 días a partir de su fecha de emisión.', 20, finalY + 4);
+    doc.text('• Los valores expresados están sujetos a modificaciones según condiciones específicas de la póliza.', 20, finalY + 8);
+    doc.text('• La presente cotización no implica aceptación del riesgo ni compromiso de emisión por parte de la compañía.', 20, finalY + 12);
 
     // Agregar datos de contacto
-    doc.setFontSize(9);
+    doc.setFontSize(isMobile ? 8 : 9);
     doc.setTextColor(...primaryColor);
-    doc.text('SIRIUS BROKER DE SEGUROS', 105, finalY + 30, { align: 'center' });
-    doc.setFontSize(8);
+    doc.text('SIRIUS BROKER DE SEGUROS', 105, finalY + 25, { align: 'center' });
+    doc.setFontSize(isMobile ? 7 : 8);
     doc.setTextColor(...secondaryColor);
-    doc.text('Tel: (011) 4444-4444 | Email: contacto@sirius.com.ar', 105, finalY + 35, { align: 'center' });
-    doc.text('www.sirius.com.ar', 105, finalY + 40, { align: 'center' });
+    doc.text('Tel: (011) 4444-4444 | Email: contacto@sirius.com.ar', 105, finalY + 30, { align: 'center' });
+    doc.text('www.sirius.com.ar', 105, finalY + 35, { align: 'center' });
 
     // Agregar número de página
     const pageCount = doc.internal.getNumberOfPages();
     for(let i = 1; i <= pageCount; i++) {
         doc.setPage(i);
-        doc.setFontSize(8);
+        doc.setFontSize(isMobile ? 7 : 8);
         doc.setTextColor(...secondaryColor);
         doc.text(`Página ${i} de ${pageCount}`, 105, 290, { align: 'center' });
     }
