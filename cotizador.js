@@ -412,6 +412,8 @@ async function toggleExchangeRate() {
     // Obtener el tipo de cambio según la moneda seleccionada
     if (currency === 'USD' || currency === 'EUR') {
         try {
+            console.log(`Obteniendo tipo de cambio para ${currency} desde BNA...`);
+            
             const response = await fetch('https://r.jina.ai/https://www.bna.com.ar/Personas', {
                 headers: {
                     'Authorization': 'Bearer jina_25ee900d2acf4a7cbb1110305f362af4xgQE8x4yHrkGItAAICF9rGobrQ1F',
@@ -421,32 +423,46 @@ async function toggleExchangeRate() {
             
             if (response.ok) {
                 const markdown = await response.text();
-                // Buscar la línea que contiene la moneda seleccionada
-                const currencyPattern = currency === 'USD' 
-                    ? /\| Dolar U\.S\.A \| \d+,\d+ \| (\d+,\d+) \|/
-                    : /\| Euro \| \d+,\d+ \| (\d+,\d+) \|/;
+                console.log('Respuesta markdown recibida:', markdown);
+                
+                // Definir el patrón según la moneda
+                let currencyPattern;
+                if (currency === 'USD') {
+                    currencyPattern = /\| Dolar U\.S\.A \| \d+,\d+ \| (\d+,\d+) \|/;
+                    console.log('Buscando patrón USD en el markdown');
+                } else {
+                    currencyPattern = /\| Euro \| \d+,\d+ \| (\d+,\d+) \|/;
+                    console.log('Buscando patrón EUR en el markdown');
+                }
                 
                 const match = markdown.match(currencyPattern);
                 if (match && match[1]) {
+                    console.log(`Valor encontrado para ${currency}:`, match[1]);
                     // Convertir el valor de formato "1.234,56" a "1234.56"
                     const exchangeRate = parseFloat(match[1].replace('.', '').replace(',', '.'));
+                    console.log(`Tipo de cambio convertido:`, exchangeRate);
+                    
                     if (!isNaN(exchangeRate) && exchangeRate > 0) {
                         exchangeRateInput.value = exchangeRate;
                         exchangeRateContainer.classList.remove('warning');
+                        console.log(`Tipo de cambio establecido para ${currency}:`, exchangeRate);
                     } else {
+                        console.error(`Error: valor de tipo de cambio inválido para ${currency}`);
                         exchangeRateInput.value = '';
                         exchangeRateContainer.classList.add('warning');
                     }
                 } else {
+                    console.error(`No se encontró el patrón para ${currency} en el markdown`);
                     exchangeRateInput.value = '';
                     exchangeRateContainer.classList.add('warning');
                 }
             } else {
+                console.error('Error en la respuesta de la API:', response.status);
                 exchangeRateInput.value = '';
                 exchangeRateContainer.classList.add('warning');
             }
         } catch (error) {
-            console.error('Error al obtener el tipo de cambio:', error);
+            console.error(`Error al obtener el tipo de cambio para ${currency}:`, error);
             exchangeRateInput.value = '';
             exchangeRateContainer.classList.add('warning');
         }
@@ -715,8 +731,19 @@ async function exportToPDF() {
 
     // Detectar si estamos en mobile
     const isMobile = window.innerWidth <= 768;
-    const logoSize = isMobile ? { width: 40, height: 16 } : { width: 50, height: 20 };
-    const fontSize = isMobile ? { title: 18, subtitle: 10, text: 8 } : { title: 24, subtitle: 12, text: 10 };
+    const logoSize = isMobile ? { width: 35, height: 14 } : { width: 50, height: 20 };
+    const fontSize = isMobile ? { title: 16, subtitle: 10, text: 8 } : { title: 24, subtitle: 12, text: 10 };
+    const margins = isMobile ? {
+        top: 10,
+        logo: { x: 10, y: 10 },
+        title: { y: 35 },
+        content: { start: 45 }
+    } : {
+        top: 20,
+        logo: { x: 20, y: 15 },
+        title: { y: 30 },
+        content: { start: 45 }
+    };
 
     try {
         // Agregar logo
@@ -729,7 +756,7 @@ async function exportToPDF() {
                 canvas.height = img.naturalHeight;
                 ctx.drawImage(img, 0, 0);
                 const imgData = canvas.toDataURL('image/png');
-                doc.addImage(imgData, 'PNG', 20, 15, logoSize.width, logoSize.height);
+                doc.addImage(imgData, 'PNG', margins.logo.x, margins.logo.y, logoSize.width, logoSize.height);
             } catch (e) {
                 console.warn('No se pudo agregar el logo:', e);
             }
@@ -741,30 +768,29 @@ async function exportToPDF() {
     // Título del documento
     doc.setFontSize(fontSize.title);
     doc.setTextColor(...primaryColor);
-    doc.text('COTIZACIÓN DE SEGURO DE CAUCIÓN', 105, isMobile ? 25 : 30, { align: 'center' });
+    doc.text('COTIZACIÓN DE SEGURO DE CAUCIÓN', 105, margins.title.y, { align: 'center' });
     
     // Línea decorativa
     doc.setDrawColor(...primaryColor);
     doc.setLineWidth(0.5);
-    doc.line(20, isMobile ? 30 : 35, 190, isMobile ? 30 : 35);
+    doc.line(margins.logo.x, margins.title.y + 5, 190, margins.title.y + 5);
 
     // Información del documento
     doc.setFontSize(fontSize.text);
     doc.setTextColor(...secondaryColor);
     const today = new Date();
-    const yPos = isMobile ? 35 : 45;
-    doc.text(`Fecha de emisión: ${today.toLocaleDateString()}`, 20, yPos);
-    doc.text(`Cotización N°: ${Math.floor(Math.random() * 1000000).toString().padStart(6, '0')}`, 20, yPos + 5);
+    doc.text(`Fecha de emisión: ${today.toLocaleDateString()}`, margins.logo.x, margins.content.start);
+    doc.text(`Cotización N°: ${Math.floor(Math.random() * 1000000).toString().padStart(6, '0')}`, margins.logo.x, margins.content.start + 5);
     
     // Datos principales de la cotización
     doc.setFontSize(fontSize.subtitle);
     doc.setTextColor(...accentColor);
-    doc.text('DATOS DE LA COTIZACIÓN', 20, yPos + 20);
+    doc.text('DATOS DE LA COTIZACIÓN', margins.logo.x, margins.content.start + 20);
 
     // Línea separadora
     doc.setDrawColor(...secondaryColor);
     doc.setLineWidth(0.2);
-    doc.line(20, yPos + 23, 190, yPos + 23);
+    doc.line(margins.logo.x, margins.content.start + 23, 190, margins.content.start + 23);
 
     // Detalles de la cotización
     const currency = currentQuote.currency;
@@ -778,14 +804,14 @@ async function exportToPDF() {
     ];
     
     doc.setFontSize(fontSize.text);
-    let y = yPos + 30;
+    let y = margins.content.start + 30;
     const colWidth = isMobile ? 40 : 50;
     
     mainData.forEach(row => {
         doc.setTextColor(...secondaryColor);
-        doc.text(row[0], 20, y);
+        doc.text(row[0], margins.logo.x, y);
         doc.setTextColor(...accentColor);
-        doc.text(row[1], 20 + colWidth, y, { maxWidth: 40 });
+        doc.text(row[1], margins.logo.x + colWidth, y, { maxWidth: 40 });
         doc.setTextColor(...secondaryColor);
         doc.text(row[2], 110, y);
         doc.setTextColor(...accentColor);
@@ -797,11 +823,11 @@ async function exportToPDF() {
     y += 10;
     doc.setFontSize(fontSize.subtitle);
     doc.setTextColor(...accentColor);
-    doc.text('DETALLE DE COSTOS', 20, y);
+    doc.text('DETALLE DE COSTOS', margins.logo.x, y);
     
     // Línea separadora
     doc.setDrawColor(...secondaryColor);
-    doc.line(20, y + 3, 190, y + 3);
+    doc.line(margins.logo.x, y + 3, 190, y + 3);
     
     // Tabla de resultados con ajustes para mobile
     y += 10;
@@ -857,10 +883,10 @@ async function exportToPDF() {
     const finalY = doc.lastAutoTable.finalY + (isMobile ? 15 : 20);
     doc.setFontSize(isMobile ? 7 : 8);
     doc.setTextColor(...secondaryColor);
-    doc.text('IMPORTANTE:', 20, finalY);
-    doc.text('• Esta cotización tiene una validez de 7 días a partir de su fecha de emisión.', 20, finalY + 4);
-    doc.text('• Los valores expresados están sujetos a modificaciones según condiciones específicas de la póliza.', 20, finalY + 8);
-    doc.text('• La presente cotización no implica aceptación del riesgo ni compromiso de emisión por parte de la compañía.', 20, finalY + 12);
+    doc.text('IMPORTANTE:', margins.logo.x, finalY);
+    doc.text('• Esta cotización tiene una validez de 7 días a partir de su fecha de emisión.', margins.logo.x, finalY + 4);
+    doc.text('• Los valores expresados están sujetos a modificaciones según condiciones específicas de la póliza.', margins.logo.x, finalY + 8);
+    doc.text('• La presente cotización no implica aceptación del riesgo ni compromiso de emisión por parte de la compañía.', margins.logo.x, finalY + 12);
 
     // Agregar datos de contacto
     doc.setFontSize(isMobile ? 8 : 9);
