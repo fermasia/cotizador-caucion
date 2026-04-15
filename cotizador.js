@@ -1,36 +1,17 @@
-// Funciones adicionales para fechas personalizadas
-document.getElementById('periodicity').addEventListener('change', function() {
-    const customDaysGroup = document.getElementById('custom-days-group');
-    customDaysGroup.style.display = (this.value === 'Personalizada') ? 'block' : 'none';
-    markChangesPending();
-});
-
-document.getElementById('date-from').addEventListener('change', calculateCustomDays);
-document.getElementById('date-to').addEventListener('change', calculateCustomDays);
-
-function calculateCustomDays() {
-    const fromDate = document.getElementById('date-from').value;
-    const toDate = document.getElementById('date-to').value;
-    if (fromDate && toDate) {
-        const start = new Date(fromDate);
-        const end = new Date(toDate);
-        if (end >= start) {
-            const diffTime = Math.abs(end - start);
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-            document.getElementById('calculated-days').textContent = diffDays;
-            markChangesPending();
-            return diffDays;
-        } else {
-            document.getElementById('calculated-days').textContent = '0';
-            return 0;
-        }
-    }
-    return 0;
-}
-
 // Ajustes en calcular días en calculateQuote y notaryCost
 // Cotizador de Seguros de Caución - JavaScript
 // Este script maneja toda la lógica del cotizador, incluyendo cálculos, validaciones y visualizaciones
+
+// Data URL del logo pre-cargado para usar en el PDF (se llena al cargar la página)
+let logoDataUrl = null;
+
+// Tipos de documento por defecto
+const defaultTiposDocumento = [
+    { nombre: 'DNI',       mascara: 'XXXXXXXX' },
+    { nombre: 'CUIL',      mascara: 'XX-XXXXXXXX-X' },
+    { nombre: 'CUIT',      mascara: 'XX-XXXXXXXX-X' },
+    { nombre: 'Pasaporte', mascara: '' }
+];
 
 // Variables globales
 let cotizadorData = {
@@ -147,9 +128,41 @@ let cotizadorData = {
         Trimestral: 90,
         Semestral: 180,
         Anual: 365
-    }
+    },
+    riesgos: [
+        "Cumplimiento de Contrato",
+        "Garantía de Oferta",
+        "Anticipo Financiero",
+        "Sustitución de Fondo de Reparo",
+        "Garantía de Servicios",
+        "Garantía Laboral",
+        "Garantía Impositiva",
+        "Alquiler"
+    ],
+    tiposDocumento: defaultTiposDocumento
 }; // Datos predeterminados en caso de que falle la carga del JSON
 let changesPending = false; // Indica si hay cambios pendientes de calcular
+
+// Función para calcular días personalizados
+function calculateCustomDays() {
+    const fromDate = document.getElementById('date-from').value;
+    const toDate = document.getElementById('date-to').value;
+    if (fromDate && toDate) {
+        const start = new Date(fromDate);
+        const end = new Date(toDate);
+        if (end >= start) {
+            const diffTime = Math.abs(end - start);
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+            document.getElementById('calculated-days').textContent = diffDays;
+            markChangesPending();
+            return diffDays;
+        } else {
+            document.getElementById('calculated-days').textContent = '0';
+            return 0;
+        }
+    }
+    return 0;
+}
 
 // Datos de sellados por jurisdicción
 const alicuotas_impuesto_sellos = {
@@ -198,12 +211,23 @@ document.addEventListener('DOMContentLoaded', function() {
     // Inicializar el editor de impuestos
     initializeTaxEditor();
 
-    // Cargar las jurisdicciones en el selector
-    loadJurisdictionsIntoSelector();
+    // Inicializar el editor de riesgos
+    initializeRiskEditor();
+
+    // Inicializar el editor de tipos de documento
+    initializeDocEditor();
 
     // Ocultar por defecto y cuando es ARS
     const exchangeRateContainer = document.getElementById('exchange-rate-container');
     exchangeRateContainer.classList.remove('visible');
+
+    // Pre-cargar logo para PDF: el src ya es un data URL embebido
+    const logoImg = document.querySelector('.logo-container img');
+    if (logoImg) {
+        const capture = () => { logoDataUrl = logoImg.src; };
+        if (logoImg.complete) capture();
+        else logoImg.addEventListener('load', capture);
+    }
 });
 
 // Cargar los datos del cotizador desde el archivo JSON
@@ -228,6 +252,15 @@ async function loadCotizadorData() {
     
     // Cargar las compañías en el selector
     loadCompaniesIntoSelector();
+
+    // Cargar las jurisdicciones después de que los datos estén disponibles
+    loadJurisdictionsIntoSelector();
+
+    // Cargar los riesgos en el selector
+    loadRisksIntoSelector();
+
+    // Cargar los tipos de documento en el selector
+    loadDocTypesIntoSelector();
 }
 
 // Cargar las compañías en el selector
@@ -257,6 +290,31 @@ function initializeEvents() {
             customDaysGroup.style.display = 'none';
         }
         markChangesPending();
+    });
+    
+    // Eventos para calcular días personalizados
+    document.getElementById('date-from').addEventListener('change', calculateCustomDays);
+    document.getElementById('date-to').addEventListener('change', calculateCustomDays);
+    
+    // Eventos para el tomador (tipo de documento)
+    document.getElementById('doc-type').addEventListener('change', function() {
+        const docType = this.value;
+        const docInput = document.getElementById('doc-number');
+        const tipo = cotizadorData.tiposDocumento.find(t => t.nombre === docType);
+        docInput.placeholder = (tipo && tipo.mascara) ? tipo.mascara.replace(/X/g, '0') : '';
+        docInput.value = docInput.value ? formatDocNumber(docType, docInput.value) : '';
+        markChangesPending();
+    });
+    
+    // Evento para formatear número de documento mientras se escribe
+    document.getElementById('doc-number').addEventListener('input', function() {
+        const docType = document.getElementById('doc-type').value;
+        const cursorPos = this.selectionStart;
+        const oldValue = this.value;
+        this.value = formatDocNumber(docType, this.value);
+        // Ajustar posición del cursor
+        const diff = this.value.length - oldValue.length;
+        this.setSelectionRange(cursorPos + diff, cursorPos + diff);
     });
     
     // Eventos para marcar cambios pendientes
@@ -338,6 +396,20 @@ function initializeEvents() {
         initializeFields();
         markChangesPending();
     });
+
+    // Eventos para el modal de tipos de documento
+    document.getElementById('edit-docs-btn').addEventListener('click', openDocsModal);
+    document.getElementById('close-docs-modal').addEventListener('click', closeDocsModal);
+    document.getElementById('add-doc-type-btn').addEventListener('click', addNewDocType);
+    document.getElementById('save-doc-types-btn').addEventListener('click', saveDocTypesChanges);
+
+    // Eventos para la sección de riesgos
+    document.getElementById('risk-type').addEventListener('change', markChangesPending);
+    document.getElementById('risk-object').addEventListener('input', markChangesPending);
+    document.getElementById('edit-risks-btn').addEventListener('click', openRisksModal);
+    document.getElementById('close-risks-modal').addEventListener('click', closeRisksModal);
+    document.getElementById('add-risk-btn').addEventListener('click', addNewRisk);
+    document.getElementById('save-risks-btn').addEventListener('click', saveRisksChanges);
 }
 
 // Marcar que hay cambios pendientes de calcular
@@ -408,63 +480,49 @@ async function toggleExchangeRate() {
     // Solo mostrar para USD y EUR
     exchangeRateContainer.classList.add('visible');
     exchangeRateInput.setAttribute('required', 'required');
-    
+
+    // Vaciar el valor anterior y mostrar indicador de búsqueda
+    exchangeRateInput.value = '';
+    exchangeRateInput.placeholder = 'Buscando TC BNA...';
+    exchangeRateContainer.classList.add('warning');
+
     // Obtener el tipo de cambio según la moneda seleccionada
     if (currency === 'USD' || currency === 'EUR') {
         try {
-            console.log(`Obteniendo tipo de cambio para ${currency} desde BNA...`);
-            
             const response = await fetch('https://r.jina.ai/https://www.bna.com.ar/Personas', {
                 headers: {
                     'Authorization': 'Bearer jina_25ee900d2acf4a7cbb1110305f362af4xgQE8x4yHrkGItAAICF9rGobrQ1F',
                     'X-Return-Format': 'markdown'
                 }
             });
-            
+
             if (response.ok) {
                 const markdown = await response.text();
-                console.log('Respuesta markdown recibida:', markdown);
-                
-                // Definir el patrón según la moneda
-                let currencyPattern;
-                if (currency === 'USD') {
-                    currencyPattern = /\| Dolar U\.S\.A \| \d+,\d+ \| (\d+,\d+) \|/;
-                    console.log('Buscando patrón USD en el markdown');
-                } else {
-                    currencyPattern = /\| Euro \| \d+,\d+ \| (\d+,\d+) \|/;
-                    console.log('Buscando patrón EUR en el markdown');
-                }
-                
+
+                const currencyPattern = currency === 'USD'
+                    ? /\| Dolar U\.S\.A \| \d+,\d+ \| (\d+,\d+) \|/
+                    : /\| Euro \| \d+,\d+ \| (\d+,\d+) \|/;
+
                 const match = markdown.match(currencyPattern);
                 if (match && match[1]) {
-                    console.log(`Valor encontrado para ${currency}:`, match[1]);
-                    // Convertir el valor de formato "1.234,56" a "1234.56"
                     const exchangeRate = parseFloat(match[1].replace('.', '').replace(',', '.'));
-                    console.log(`Tipo de cambio convertido:`, exchangeRate);
-                    
                     if (!isNaN(exchangeRate) && exchangeRate > 0) {
                         exchangeRateInput.value = exchangeRate;
                         exchangeRateContainer.classList.remove('warning');
-                        console.log(`Tipo de cambio establecido para ${currency}:`, exchangeRate);
                     } else {
-                        console.error(`Error: valor de tipo de cambio inválido para ${currency}`);
-                        exchangeRateInput.value = '';
                         exchangeRateContainer.classList.add('warning');
                     }
                 } else {
-                    console.error(`No se encontró el patrón para ${currency} en el markdown`);
-                    exchangeRateInput.value = '';
                     exchangeRateContainer.classList.add('warning');
                 }
             } else {
-                console.error('Error en la respuesta de la API:', response.status);
-                exchangeRateInput.value = '';
                 exchangeRateContainer.classList.add('warning');
             }
         } catch (error) {
             console.error(`Error al obtener el tipo de cambio para ${currency}:`, error);
-            exchangeRateInput.value = '';
             exchangeRateContainer.classList.add('warning');
+        } finally {
+            exchangeRateInput.placeholder = 'Ingrese el tipo de cambio';
         }
     }
     
@@ -476,9 +534,74 @@ async function toggleExchangeRate() {
     }
 }
 
+// Aplicar máscara a un valor. X = dígito, resto = separador literal.
+function applyMask(mask, value) {
+    if (!mask) return value;
+    const digits = value.replace(/\D/g, '');
+    const xCount = (mask.match(/X/g) || []).length;
+    const capped = digits.substring(0, xCount);
+    let result = '';
+    let di = 0;
+    for (let i = 0; i < mask.length; i++) {
+        if (mask[i] === 'X') {
+            if (di >= capped.length) break;
+            result += capped[di++];
+        } else {
+            // Agregar separador sólo si ya hay dígitos antes Y hay más dígitos disponibles
+            if (di > 0 && di < capped.length) result += mask[i];
+        }
+    }
+    return result;
+}
+
+// Validar número de documento según la máscara del tipo
+function validateDocNumber(docType, docNumber) {
+    if (!docType || !docNumber) return false;
+    const tipo = cotizadorData.tiposDocumento.find(t => t.nombre === docType);
+    if (!tipo) return false;
+    if (!tipo.mascara) return docNumber.trim() !== '';   // sin máscara: cualquier valor
+    const xCount = (tipo.mascara.match(/X/g) || []).length;
+    return docNumber.replace(/\D/g, '').length === xCount;
+}
+
+// Auto-formatear número de documento según la máscara del tipo
+function formatDocNumber(docType, value) {
+    if (!docType || value === undefined) return value;
+    const tipo = cotizadorData.tiposDocumento.find(t => t.nombre === docType);
+    if (!tipo || !tipo.mascara) return value;
+    return applyMask(tipo.mascara, value);
+}
+
 // Validar el formulario
 function validateForm() {
     let isValid = true;
+    
+    // Validar tipo de documento
+    const docType = document.getElementById('doc-type').value;
+    if (!docType) {
+        document.getElementById('doc-type-error').style.display = 'block';
+        isValid = false;
+    } else {
+        document.getElementById('doc-type-error').style.display = 'none';
+    }
+    
+    // Validar nombre del tomador
+    const takerName = document.getElementById('taker-name').value;
+    if (!takerName || takerName.trim() === '') {
+        document.getElementById('taker-name-error').style.display = 'block';
+        isValid = false;
+    } else {
+        document.getElementById('taker-name-error').style.display = 'none';
+    }
+    
+    // Validar número de documento
+    const docNumber = document.getElementById('doc-number').value;
+    if (!docNumber || !validateDocNumber(docType, docNumber)) {
+        document.getElementById('doc-number-error').style.display = 'block';
+        isValid = false;
+    } else {
+        document.getElementById('doc-number-error').style.display = 'none';
+    }
     
     // Validar compañía
     const company = document.getElementById('company').value;
@@ -528,7 +651,7 @@ function validateForm() {
     }
     
     // Validar días personalizados si corresponde
-    if (periodicity === 'Custom') {
+    if (periodicity === 'Personalizada') {
         const customDays = document.getElementById('custom-days').value;
         if (!customDays || isNaN(customDays) || parseInt(customDays) <= 0) {
             document.getElementById('custom-days-error').style.display = 'block';
@@ -662,6 +785,12 @@ function calculateQuote() {
     
     // Guardar los resultados para posible exportación a PDF
     const quoteResults = {
+        docType: document.getElementById('doc-type').value,
+        takerName: document.getElementById('taker-name').value,
+        docNumber: document.getElementById('doc-number').value,
+        riesgo: document.getElementById('risk-type').value,
+        objeto: document.getElementById('risk-object').value,
+        quoteNumber: Math.floor(Math.random() * 1000000).toString().padStart(6, '0'),
         company,
         notaryType,
         currency,
@@ -729,126 +858,151 @@ async function exportToPDF() {
     const secondaryColor = [128, 128, 128];
     const accentColor = [15, 27, 50];
 
-    // Detectar si estamos en mobile
-    const isMobile = window.innerWidth <= 768;
-    const logoSize = isMobile ? { width: 35, height: 14 } : { width: 50, height: 20 };
-    const fontSize = isMobile ? { title: 16, subtitle: 10, text: 8 } : { title: 24, subtitle: 12, text: 10 };
-    const margins = isMobile ? {
-        top: 10,
-        logo: { x: 10, y: 10 },
-        title: { y: 35 },
-        content: { start: 45 }
-    } : {
-        top: 20,
-        logo: { x: 20, y: 15 },
-        title: { y: 30 },
-        content: { start: 45 }
-    };
+    // ── Constantes de layout ──────────────────────────────────────────────────
+    const isMobile   = window.innerWidth <= 768;
+    const pageW      = 210;
+    const marginL    = isMobile ? 12 : 20;
+    const marginR    = isMobile ? 198 : 190;
+    const logoSize   = isMobile ? { width: 32, height: 13 } : { width: 45, height: 18 };
+    const fontSize   = isMobile ? { title: 11, subtitle: 9, text: 8 } : { title: 13, subtitle: 10, text: 9 };
+    const headerH    = isMobile ? 34 : 42;   // altura total de la banda del encabezado
+    const rowH       = isMobile ? 6  : 7;    // altura de cada fila de datos
+    const colLabel   = marginL;
+    const colWidth   = isMobile ? 36 : 46;   // ancho de la columna de labels
+    const colVal     = colLabel + colWidth;
+    const col2Label  = isMobile ? 110 : 118;
+    const col2Val    = col2Label + colWidth;
+    const lightGray  = [244, 246, 250];
+    const labelColor = [130, 135, 148];
+    const lineHeight = fontSize.text * 0.42;
 
-    try {
-        // Agregar logo
-        const img = document.querySelector('.logo-container img');
-        if (img && img.complete) {
-            try {
-                const canvas = document.createElement('canvas');
-                const ctx = canvas.getContext('2d');
-                canvas.width = img.naturalWidth;
-                canvas.height = img.naturalHeight;
-                ctx.drawImage(img, 0, 0);
-                const imgData = canvas.toDataURL('image/png');
-                doc.addImage(imgData, 'PNG', margins.logo.x, margins.logo.y, logoSize.width, logoSize.height);
-            } catch (e) {
-                console.warn('No se pudo agregar el logo:', e);
-            }
-        }
-    } catch (e) {
-        console.warn('Error al procesar el logo:', e);
+    // ── ENCABEZADO ────────────────────────────────────────────────────────────
+
+    // Banda de fondo
+    doc.setFillColor(...lightGray);
+    doc.rect(0, 0, pageW, headerH, 'F');
+
+    // Franja navy en la base del encabezado
+    doc.setFillColor(...primaryColor);
+    doc.rect(0, headerH, pageW, 2, 'F');
+
+    // Logo: centrado verticalmente en la banda, pegado al margen izquierdo
+    const logoY = (headerH - logoSize.height) / 2;
+    if (logoDataUrl) {
+        doc.addImage(logoDataUrl, 'PNG', marginL, logoY, logoSize.width, logoSize.height);
     }
 
-    // Título del documento
+    // Título: centrado verticalmente en la banda, alineado al margen derecho
+    // Esto crea simetría visual logo-izquierda / título-derecha dentro de la misma banda
+    const titleBaseline = headerH / 2 + fontSize.title * 0.18;
     doc.setFontSize(fontSize.title);
+    doc.setFont('helvetica', 'bold');
     doc.setTextColor(...primaryColor);
-    doc.text('COTIZACIÓN DE SEGURO DE CAUCIÓN', 105, margins.title.y, { align: 'center' });
-    
-    // Línea decorativa
-    doc.setDrawColor(...primaryColor);
-    doc.setLineWidth(0.5);
-    doc.line(margins.logo.x, margins.title.y + 5, 190, margins.title.y + 5);
+    doc.text('COTIZACIÓN DE SEGURO DE CAUCIÓN', marginR, titleBaseline, { align: 'right' });
+    doc.setFont('helvetica', 'normal');
 
-    // Información del documento
-    doc.setFontSize(fontSize.text);
-    doc.setTextColor(...secondaryColor);
+    // Fecha y N° de cotización: alineados a la derecha, justo debajo de la franja
     const today = new Date();
-    doc.text(`Fecha de emisión: ${today.toLocaleDateString()}`, margins.logo.x, margins.content.start);
-    doc.text(`Cotización N°: ${Math.floor(Math.random() * 1000000).toString().padStart(6, '0')}`, margins.logo.x, margins.content.start + 5);
-    
-    // Datos principales de la cotización
+    const metaY = headerH + (isMobile ? 6 : 8);
+    doc.setFontSize(fontSize.text - 1);
+    doc.setTextColor(...labelColor);
+    doc.text(`Cotización N°: ${currentQuote.quoteNumber || '000000'}   Fecha: ${today.toLocaleDateString()}`, marginR, metaY, { align: 'right' });
+
+    // ── DATOS DE LA COTIZACIÓN ────────────────────────────────────────────────
+
+    let y = metaY + (isMobile ? 8 : 10);
+
+    // Título de sección con acento izquierdo
+    doc.setFillColor(...primaryColor);
+    doc.rect(marginL, y - 4, 3, isMobile ? 5 : 6, 'F');
     doc.setFontSize(fontSize.subtitle);
-    doc.setTextColor(...accentColor);
-    doc.text('DATOS DE LA COTIZACIÓN', margins.logo.x, margins.content.start + 20);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(...primaryColor);
+    doc.text('DATOS DE LA COTIZACIÓN', marginL + 6, y);
+    doc.setFont('helvetica', 'normal');
 
-    // Línea separadora
-    doc.setDrawColor(...secondaryColor);
+    y += isMobile ? 4 : 5;
+
+    // Línea separadora fina
+    doc.setDrawColor(200, 205, 215);
     doc.setLineWidth(0.2);
-    doc.line(margins.logo.x, margins.content.start + 23, 190, margins.content.start + 23);
+    doc.line(marginL, y, marginR, y);
 
-    // Detalles de la cotización
-    const currency = currentQuote.currency;
+    y += isMobile ? 5 : 6;
+
+    // Filas de datos: { full, label, value } | [label, val, label, val]
+    const currency     = currentQuote.currency;
     const exchangeRate = sessionStorage.getItem('exchangeRate');
-    
     const mainData = [
-        ['Compañía:', currentQuote.company, 'Moneda:', currency + (currency !== 'ARS' ? ` (TC: ${exchangeRate})` : '')],
-        ['Suma Asegurada:', formatCurrency(currentQuote.insuredAmount, currency), 'Jurisdicción:', document.getElementById('jurisdiction').value],
-        ['Periodicidad:', `${currentQuote.periodicity} (${currentQuote.days} días)`, 'Tasa Anual:', `${currentQuote.annualRate.toFixed(2)}%`],
-        ['Tipo de Certificación:', currentQuote.notaryType, 'Recargo Adm.:', `${currentQuote.administrativeSurchargeAmount.toFixed(2)}%`]
+        { full: true, label: 'Tomador:',  value: `${currentQuote.takerName}  (${currentQuote.docType} ${currentQuote.docNumber})` },
+        ['Jurisdicción:', document.getElementById('jurisdiction').value, 'Compañía:', currentQuote.company],
+        ['Moneda:', currency + (currency !== 'ARS' ? ` (TC: ${exchangeRate})` : ''), 'Suma Asegurada:', formatCurrency(currentQuote.insuredAmount, currency)],
+        { full: true, label: 'Riesgo:',   value: currentQuote.riesgo || '' },
+        ['Periodicidad:', `${currentQuote.periodicity} (${currentQuote.days} días)`, 'Tipo de Certificación:', currentQuote.notaryType],
+        { full: true, label: 'Objeto:',   value: currentQuote.objeto || '' }
     ];
-    
+
     doc.setFontSize(fontSize.text);
-    let y = margins.content.start + 30;
-    const colWidth = isMobile ? 40 : 50;
-    
-    mainData.forEach(row => {
-        doc.setTextColor(...secondaryColor);
-        doc.text(row[0], margins.logo.x, y);
-        doc.setTextColor(...accentColor);
-        doc.text(row[1], margins.logo.x + colWidth, y, { maxWidth: 40 });
-        doc.setTextColor(...secondaryColor);
-        doc.text(row[2], 110, y);
-        doc.setTextColor(...accentColor);
-        doc.text(row[3], 110 + colWidth, y, { maxWidth: 40 });
-        y += 8;
+    mainData.forEach((row, idx) => {
+        // Fondo alternado suave
+        if (idx % 2 === 0) {
+            doc.setFillColor(250, 251, 253);
+            doc.rect(marginL, y - rowH + 1.5, marginR - marginL, rowH, 'F');
+        }
+
+        if (row.full) {
+            const maxW = marginR - colVal - 2;
+            const lines = doc.splitTextToSize(row.value, maxW);
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(...labelColor);
+            doc.text(row.label, colLabel, y);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(...accentColor);
+            doc.text(lines, colVal, y);
+            doc.setFont('helvetica', 'normal');
+            y += Math.max(rowH, lines.length * lineHeight + 2);
+        } else {
+            doc.setTextColor(...labelColor);
+            doc.text(row[0], colLabel,  y);
+            doc.text(row[2], col2Label, y);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(...accentColor);
+            doc.text(row[1], colVal,  y, { maxWidth: col2Label - colVal - 4 });
+            doc.text(row[3], col2Val, y, { maxWidth: marginR - col2Val });
+            doc.setFont('helvetica', 'normal');
+            y += rowH;
+        }
     });
-    
-    // Título de la sección de resultados
-    y += 10;
+
+    // ── DETALLE DE COSTOS ─────────────────────────────────────────────────────
+
+    y += isMobile ? 6 : 8;
+
+    // Título de sección con acento izquierdo
+    doc.setFillColor(...primaryColor);
+    doc.rect(marginL, y - 4, 3, isMobile ? 5 : 6, 'F');
     doc.setFontSize(fontSize.subtitle);
-    doc.setTextColor(...accentColor);
-    doc.text('DETALLE DE COSTOS', margins.logo.x, y);
-    
-    // Línea separadora
-    doc.setDrawColor(...secondaryColor);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(...primaryColor);
+    doc.text('DETALLE DE COSTOS', marginL + 6, y);
+    doc.setFont('helvetica', 'normal');
+
+    y += isMobile ? 4 : 5;
+    doc.setDrawColor(200, 205, 215);
     doc.setLineWidth(0.2);
-    doc.line(margins.logo.x, y + 3, 190, y + 3);
-    
-    // Tabla de resultados con ajustes para mobile
-    y += 10;
+    doc.line(marginL, y, marginR, y);
+    y += isMobile ? 4 : 5;
+
+    // Tabla de costos
+    const subtotalSinCert = currentQuote.subtotal - currentQuote.notaryCost;
     const resultData = [
         ['CONCEPTO', 'MONTO'],
-        ['Prima', formatCurrency(currentQuote.premium, currentQuote.currency)],
-        ['Derecho de Emisión', formatCurrency(currentQuote.emissionRight, currentQuote.currency)],
-        ['Certificación', formatCurrency(currentQuote.notaryCost, currentQuote.currency)],
-        ['Impuesto País', formatCurrency(currentQuote.countryTax, currentQuote.currency)],
-        ['Recargo Administrativo', formatCurrency(currentQuote.administrativeSurchargeAmount, currentQuote.currency)],
-        ['Subtotal', formatCurrency(currentQuote.subtotal, currentQuote.currency)],
-        ['Intereses Internos', formatCurrency(currentQuote.internalInterest, currentQuote.currency)],
-        ['Tasa SSN', formatCurrency(currentQuote.ssnRate, currentQuote.currency)],
-        ['OSSEG', formatCurrency(currentQuote.osseg, currentQuote.currency)],
-        ['Sellos', formatCurrency(currentQuote.stamps, currentQuote.currency)],
-        ['IVA', formatCurrency(currentQuote.vat, currentQuote.currency)],
-        ['Total Impuestos', formatCurrency(currentQuote.totalTaxes, currentQuote.currency)],
-        ['PREMIO FINAL', formatCurrency(currentQuote.finalPrize, currentQuote.currency)]
+        ['Prima y Gastos Operativos',  formatCurrency(subtotalSinCert,              currentQuote.currency)],
+        ['Certificación',              formatCurrency(currentQuote.notaryCost,       currentQuote.currency)],
+        ['Impuestos y Sellados',       formatCurrency(currentQuote.totalTaxes,       currentQuote.currency)],
+        ['TOTAL',                      formatCurrency(currentQuote.finalPrize,       currentQuote.currency)]
     ];
-    
+
     doc.autoTable({
         startY: y,
         head: [resultData[0]],
@@ -857,46 +1011,76 @@ async function exportToPDF() {
         headStyles: {
             fillColor: primaryColor,
             textColor: [255, 255, 255],
-            fontSize: isMobile ? 9 : 11,
+            fontSize: isMobile ? 9 : 10,
             fontStyle: 'bold',
-            halign: 'center'
+            halign: 'center',
+            cellPadding: isMobile ? 3 : 4
         },
         columnStyles: {
             0: { cellWidth: isMobile ? 80 : 100 },
             1: { cellWidth: isMobile ? 50 : 70, halign: 'right' }
         },
-        alternateRowStyles: {
-            fillColor: [245, 245, 245]
-        },
+        alternateRowStyles: { fillColor: [247, 248, 251] },
         bodyStyles: {
-            fontSize: isMobile ? 8 : 10,
-            textColor: accentColor
+            fontSize: isMobile ? 8 : 9.5,
+            textColor: accentColor,
+            cellPadding: isMobile ? 3 : 4
         },
-        styles: {
-            cellPadding: isMobile ? 3 : 5,
-            fontSize: isMobile ? 8 : 10,
-            valign: 'middle'
+        styles: { valign: 'middle' },
+        didParseCell: function(data) {
+            if (data.section === 'body' && data.row.index === resultData.length - 2) {
+                // Fila TOTAL: navy sólido, texto blanco, fuente mayor
+                data.cell.styles.fillColor    = primaryColor;
+                data.cell.styles.textColor    = [255, 255, 255];
+                data.cell.styles.fontStyle    = 'bold';
+                data.cell.styles.fontSize     = isMobile ? 9 : 11;
+            }
         },
-        margin: { left: 20 }
+        willDrawCell: function(data) {
+            // Línea gruesa separadora encima de la fila TOTAL
+            if (data.section === 'body' && data.row.index === resultData.length - 2) {
+                doc.setDrawColor(...primaryColor);
+                doc.setLineWidth(0.6);
+                doc.line(data.cell.x, data.cell.y, data.cell.x + data.cell.width, data.cell.y);
+            }
+        },
+        margin: { left: marginL }
     });
-    
-    // Pie de página
-    const finalY = doc.lastAutoTable.finalY + (isMobile ? 15 : 20);
-    doc.setFontSize(isMobile ? 7 : 8);
-    doc.setTextColor(...secondaryColor);
-    doc.text('IMPORTANTE:', margins.logo.x, finalY);
-    doc.text('• Esta cotización tiene una validez de 7 días a partir de su fecha de emisión.', margins.logo.x, finalY + 4);
-    doc.text('• Los valores expresados están sujetos a modificaciones según condiciones específicas de la póliza.', margins.logo.x, finalY + 8);
-    doc.text('• La presente cotización no implica aceptación del riesgo ni compromiso de emisión por parte de la compañía.', margins.logo.x, finalY + 12);
 
-    // Agregar datos de contacto
-    doc.setFontSize(isMobile ? 8 : 9);
-    doc.setTextColor(...primaryColor);
-    doc.text('SIRIUS BROKER DE SEGUROS', 105, finalY + 25, { align: 'center' });
+    // ── PIE DE PÁGINA ─────────────────────────────────────────────────────────
+
+    const footerY = doc.lastAutoTable.finalY + (isMobile ? 7 : 9);
+    const importanteH = isMobile ? 18 : 20;
+    const importanteW = marginR - marginL;
+
+    // Recuadro IMPORTANTE
+    doc.setFillColor(248, 249, 252);
+    doc.setDrawColor(200, 205, 215);
+    doc.setLineWidth(0.3);
+    doc.roundedRect(marginL, footerY, importanteW, importanteH, 2, 2, 'FD');
+
     doc.setFontSize(isMobile ? 7 : 8);
-    doc.setTextColor(...secondaryColor);
-    doc.text('Tel: (011) 4444-4444 | Email: contacto@sirius.com.ar', 105, finalY + 30, { align: 'center' });
-    doc.text('www.sirius.com.ar', 105, finalY + 35, { align: 'center' });
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(...primaryColor);
+    doc.text('IMPORTANTE:', marginL + 3, footerY + (isMobile ? 4 : 5));
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(...labelColor);
+    const lineOffset = isMobile ? 3.5 : 4;
+    doc.text('• Esta cotización tiene una validez de 7 días a partir de su fecha de emisión.', marginL + 3, footerY + lineOffset * 2);
+    doc.text('• Los valores expresados están sujetos a modificaciones según condiciones específicas de la póliza.', marginL + 3, footerY + lineOffset * 3);
+    doc.text('• La presente cotización no implica aceptación del riesgo ni compromiso de emisión por parte de la compañía.', marginL + 3, footerY + lineOffset * 4);
+
+    // Datos de contacto
+    const contactY = footerY + importanteH + (isMobile ? 6 : 8);
+    doc.setFontSize(isMobile ? 8 : 9);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(...primaryColor);
+    doc.text('SIRIUS BROKER DE SEGUROS', 105, contactY, { align: 'center' });
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(isMobile ? 7 : 8);
+    doc.setTextColor(...labelColor);
+    doc.text('Tel: (011) 4444-4444  |  Email: contacto@sirius.com.ar', 105, contactY + (isMobile ? 4 : 5), { align: 'center' });
+    doc.text('www.sirius.com.ar', 105, contactY + (isMobile ? 8 : 10), { align: 'center' });
 
     // Agregar número de página
     const pageCount = doc.internal.getNumberOfPages();
@@ -1184,6 +1368,16 @@ function loadDataFromLocalStorage() {
                 if (!parsedData.sellados) {
                     parsedData.sellados = alicuotas_impuesto_sellos;
                 }
+
+                // Asegurarse de que los riesgos se mantengan si no existen en los datos guardados
+                if (!parsedData.riesgos || !Array.isArray(parsedData.riesgos)) {
+                    parsedData.riesgos = cotizadorData.riesgos;
+                }
+
+                // Asegurarse de que los tipos de documento se mantengan si no existen en los datos guardados
+                if (!parsedData.tiposDocumento || !Array.isArray(parsedData.tiposDocumento)) {
+                    parsedData.tiposDocumento = defaultTiposDocumento.slice();
+                }
                 
                 // Verificar y asegurar que cada compañía tenga la estructura correcta
                 parsedData.companias = parsedData.companias.map(company => {
@@ -1306,11 +1500,19 @@ function closeTaxesModal() {
     document.getElementById('taxes-modal').style.display = 'none';
 }
 
-// Evento para cerrar el modal cuando se hace clic fuera de él
+// Evento para cerrar los modales cuando se hace clic fuera de ellos
 window.addEventListener('click', function(event) {
-    const modal = document.getElementById('taxes-modal');
-    if (event.target === modal) {
+    const taxesModal = document.getElementById('taxes-modal');
+    if (event.target === taxesModal) {
         closeTaxesModal();
+    }
+    const risksModal = document.getElementById('risks-modal');
+    if (event.target === risksModal) {
+        closeRisksModal();
+    }
+    const docsModal = document.getElementById('docs-modal');
+    if (event.target === docsModal) {
+        closeDocsModal();
     }
 });
 
@@ -1359,17 +1561,6 @@ function generateStampsTable() {
 function updateStampRate(jurisdiccion, valor) {
     cotizadorData.sellados[jurisdiccion] = parseFloat(valor) || 0;
     markChangesPending();
-}
-
-// Función para inicializar el porcentaje de sellado según la jurisdicción
-function initializeStampPercentage() {
-    const jurisdiccion = document.getElementById('jurisdiction').value;
-    if (jurisdiccion) {
-        const alicuota = cotizadorData.sellados[jurisdiccion];
-        document.getElementById('stamp-percentage').value = alicuota;
-        document.getElementById('stamps-percentage').value = alicuota;
-        markChangesPending();
-    }
 }
 
 // Función para actualizar el nombre de una compañía
@@ -1485,3 +1676,150 @@ document.getElementById('currency').addEventListener('change', async function() 
     initializeFields();
 });
 document.getElementById('notary-type').addEventListener('change', initializeFields);
+
+// Funciones para el editor de riesgos
+
+function loadRisksIntoSelector() {
+    const riskSelect = document.getElementById('risk-type');
+    const currentValue = riskSelect.value;
+    riskSelect.innerHTML = '<option value="" disabled selected hidden>Seleccione un riesgo</option>';
+    cotizadorData.riesgos.forEach(riesgo => {
+        const option = document.createElement('option');
+        option.value = riesgo;
+        option.textContent = riesgo;
+        riskSelect.appendChild(option);
+    });
+    // Restaurar la selección previa si sigue existiendo
+    if (currentValue && cotizadorData.riesgos.includes(currentValue)) {
+        riskSelect.value = currentValue;
+    }
+}
+
+function initializeRiskEditor() {
+    generateRisksTable();
+}
+
+function openRisksModal() {
+    generateRisksTable();
+    document.getElementById('risks-modal').style.display = 'block';
+}
+
+function closeRisksModal() {
+    document.getElementById('risks-modal').style.display = 'none';
+}
+
+function generateRisksTable() {
+    const tableBody = document.getElementById('risks-table-body');
+    tableBody.innerHTML = '';
+    cotizadorData.riesgos.forEach((riesgo, index) => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td style="text-align:left;">
+                <input type="text" class="risk-name-input" value="${riesgo.replace(/"/g, '&quot;')}"
+                       style="width:100%; padding:6px; border:1px solid #ddd; border-radius:4px; font-family:var(--font-form); font-size:1rem;">
+            </td>
+            <td style="text-align:center;">
+                <button class="btn-remove-company" onclick="removeRisk(${index})">Eliminar</button>
+            </td>
+        `;
+        tableBody.appendChild(row);
+    });
+}
+
+function addNewRisk() {
+    cotizadorData.riesgos.push('Nuevo Riesgo');
+    generateRisksTable();
+}
+
+function removeRisk(index) {
+    if (!confirm(`¿Está seguro de que desea eliminar el riesgo "${cotizadorData.riesgos[index]}"?`)) return;
+    cotizadorData.riesgos.splice(index, 1);
+    generateRisksTable();
+}
+
+function saveRisksChanges() {
+    const inputs = document.querySelectorAll('#risks-table-body .risk-name-input');
+    cotizadorData.riesgos = Array.from(inputs)
+        .map(i => i.value.trim())
+        .filter(v => v !== '');
+    localStorage.setItem('cotizadorData', JSON.stringify(cotizadorData));
+    loadRisksIntoSelector();
+    closeRisksModal();
+    alert('Los riesgos se han guardado correctamente');
+}
+
+// Funciones para el editor de tipos de documento
+
+function loadDocTypesIntoSelector() {
+    const select = document.getElementById('doc-type');
+    const current = select.value;
+    select.innerHTML = '<option value="" disabled selected hidden>Seleccione...</option>';
+    cotizadorData.tiposDocumento.forEach(tipo => {
+        const opt = document.createElement('option');
+        opt.value = tipo.nombre;
+        opt.textContent = tipo.nombre;
+        select.appendChild(opt);
+    });
+    if (current && cotizadorData.tiposDocumento.some(t => t.nombre === current)) {
+        select.value = current;
+    }
+}
+
+function initializeDocEditor() {
+    generateDocTypesTable();
+}
+
+function openDocsModal() {
+    generateDocTypesTable();
+    document.getElementById('docs-modal').style.display = 'block';
+}
+
+function closeDocsModal() {
+    document.getElementById('docs-modal').style.display = 'none';
+}
+
+function generateDocTypesTable() {
+    const tbody = document.getElementById('doc-types-table-body');
+    tbody.innerHTML = '';
+    cotizadorData.tiposDocumento.forEach((tipo, index) => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td style="text-align:left;">
+                <input type="text" class="doc-name-input" value="${tipo.nombre.replace(/"/g, '&quot;')}"
+                       style="width:100%; padding:6px; border:1px solid #ddd; border-radius:4px; font-family:var(--font-form); font-size:1rem;">
+            </td>
+            <td style="text-align:left;">
+                <input type="text" class="doc-mask-input" value="${tipo.mascara}"
+                       placeholder="Ej: XX-XXXXXXXX-X  (X = dígito)"
+                       style="width:100%; padding:6px; border:1px solid #ddd; border-radius:4px; font-family:var(--font-numbers); font-size:1rem; letter-spacing:1px;">
+            </td>
+            <td style="text-align:center;">
+                <button class="btn-remove-company" onclick="removeDocType(${index})">Eliminar</button>
+            </td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+function addNewDocType() {
+    cotizadorData.tiposDocumento.push({ nombre: 'Nuevo Tipo', mascara: '' });
+    generateDocTypesTable();
+}
+
+function removeDocType(index) {
+    if (!confirm(`¿Está seguro de que desea eliminar el tipo "${cotizadorData.tiposDocumento[index].nombre}"?`)) return;
+    cotizadorData.tiposDocumento.splice(index, 1);
+    generateDocTypesTable();
+}
+
+function saveDocTypesChanges() {
+    const rows = document.querySelectorAll('#doc-types-table-body tr');
+    cotizadorData.tiposDocumento = Array.from(rows).map(row => ({
+        nombre:  row.querySelector('.doc-name-input').value.trim(),
+        mascara: row.querySelector('.doc-mask-input').value.trim()
+    })).filter(t => t.nombre !== '');
+    localStorage.setItem('cotizadorData', JSON.stringify(cotizadorData));
+    loadDocTypesIntoSelector();
+    closeDocsModal();
+    alert('Los tipos de documento se han guardado correctamente');
+}
