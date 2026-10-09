@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.wrangler/
+.aws
+.codex
+.agents
+.env
+.env.*
+.dev.vars
+.dev.vars.*
+.clerk/

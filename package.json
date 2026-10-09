@@ -1,0 +1,14 @@
+{
+    "name": "cotizador-caucion",
+    "private": true,
+    "scripts": {
+        "build": "node scripts/build.mjs",
+        "dev": "npm run build && wrangler dev",
+        "check": "node --check cotizador.js && node --check auth.js && node --check art.js && node --check art-catalog.js && node --check art-quotes-model.js && node --check art-quotes.js && node --check ciiu-data.js && node --check ciiu-source.mjs && node --check worker.mjs && node --check clerk-config.js && node --check scripts/build.mjs",
+        "test": "node scripts/auth.test.mjs && node scripts/ciiu.test.mjs && node scripts/art.test.mjs && node scripts/doc-types.test.mjs && node scripts/art-ui.test.mjs && node scripts/art-quotes.test.mjs",
+        "deploy": "npm run build && wrangler deploy"
+    },
+    "devDependencies": {
+        "wrangler": "4.148.0"
+    }
+}

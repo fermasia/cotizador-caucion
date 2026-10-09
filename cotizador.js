@@ -318,7 +318,7 @@ function initializeEvents() {
     });
     
     // Eventos para marcar cambios pendientes
-    const inputElements = document.querySelectorAll('input, select');
+    const inputElements = document.querySelectorAll('#caucion-tool input, #caucion-tool select');
     inputElements.forEach(element => {
         element.addEventListener('change', markChangesPending);
         if (element.type === 'number' || element.type === 'text') {
@@ -443,7 +443,7 @@ function initializeEmissionRight() {
         const selectedCompany = cotizadorData.companias.find(c => c.nombre === company);
         if (selectedCompany) {
             if (currency === 'ARS') {
-                document.getElementById('emission-right').value = selectedCompany.derecho_emision[currency];
+                document.getElementById('emission-right-value').value = selectedCompany.derecho_emision[currency];
                 exchangeRateContainer.classList.remove('warning');
             } else {
                 // Para USD y EUR, usar el valor en ARS dividido por el tipo de cambio
@@ -452,10 +452,10 @@ function initializeEmissionRight() {
                 
                 if (!exchangeRate || isNaN(exchangeRate) || exchangeRate <= 0) {
                     exchangeRateContainer.classList.add('warning');
-                    document.getElementById('emission-right').value = '';
+                    document.getElementById('emission-right-value').value = '';
                 } else {
                     exchangeRateContainer.classList.remove('warning');
-                    document.getElementById('emission-right').value = (arsValue / exchangeRate).toFixed(2);
+                    document.getElementById('emission-right-value').value = (arsValue / exchangeRate).toFixed(2);
                 }
             }
         }
@@ -491,7 +491,6 @@ async function toggleExchangeRate() {
         try {
             const response = await fetch('https://r.jina.ai/https://www.bna.com.ar/Personas', {
                 headers: {
-                    'Authorization': 'Bearer jina_25ee900d2acf4a7cbb1110305f362af4xgQE8x4yHrkGItAAICF9rGobrQ1F',
                     'X-Return-Format': 'markdown'
                 }
             });
@@ -1751,18 +1750,22 @@ function saveRisksChanges() {
 // Funciones para el editor de tipos de documento
 
 function loadDocTypesIntoSelector() {
-    const select = document.getElementById('doc-type');
-    const current = select.value;
-    select.innerHTML = '<option value="" disabled selected hidden>Seleccione...</option>';
-    cotizadorData.tiposDocumento.forEach(tipo => {
-        const opt = document.createElement('option');
-        opt.value = tipo.nombre;
-        opt.textContent = tipo.nombre;
-        select.appendChild(opt);
+    ['doc-type', 'art-doc-type'].forEach(id => {
+        const select = document.getElementById(id);
+        if (!select) return;
+        const current = select.value;
+        select.innerHTML = '<option value="" disabled selected hidden>Seleccione...</option>';
+        cotizadorData.tiposDocumento.forEach(tipo => {
+            const opt = document.createElement('option');
+            opt.value = tipo.nombre;
+            opt.textContent = tipo.nombre;
+            select.appendChild(opt);
+        });
+        if (current && cotizadorData.tiposDocumento.some(t => t.nombre === current)) {
+            select.value = current;
+        }
     });
-    if (current && cotizadorData.tiposDocumento.some(t => t.nombre === current)) {
-        select.value = current;
-    }
+    document.dispatchEvent(new Event('doc-types-updated'));
 }
 
 function initializeDocEditor() {
