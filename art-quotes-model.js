@@ -8,9 +8,12 @@ const ArtQuotes = (() => {
     // Compensar la precisión binaria también en importes mayores a un peso.
     const roundMoney = value => Math.round((value + Number.EPSILON * Math.max(1, Math.abs(value))) * 100) / 100;
 
-    function calculate(capitasValue, payrollValue, quotes) {
+    function calculate(capitasValue, payrollValue, quotes, currentIndex = null) {
         if (!Array.isArray(quotes) || quotes.length < 1 || quotes.length > 5) {
             throw new Error('La cantidad de cotizaciones debe estar entre 1 y 5.');
+        }
+        if (currentIndex !== null && (!Number.isInteger(currentIndex) || currentIndex < 0 || currentIndex >= quotes.length)) {
+            throw new Error('La cotización de referencia debe estar entre las cotizaciones activas.');
         }
         const capitas = numberFrom(capitasValue);
         const payroll = numberFrom(payrollValue);
@@ -19,7 +22,7 @@ const ArtQuotes = (() => {
             payroll: payroll !== null && payroll > 0 && payroll <= Number.MAX_SAFE_INTEGER / 1200
                 ? '' : 'Ingresá una masa salarial mensual positiva y válida.'
         };
-        const rows = quotes.map(quote => {
+        const rows = quotes.map((quote, index) => {
             const company = String(quote.company ?? '').trim();
             const rate = numberFrom(quote.rate);
             const rowErrors = {
@@ -32,21 +35,28 @@ const ArtQuotes = (() => {
                 company, rate, errors: rowErrors, monthly,
                 perCapita: valid ? roundMoney(monthly / capitas) : null,
                 annual: valid ? roundMoney(monthly * 12) : null,
-                difference: null, lowest: false
+                difference: null, lowest: false, current: index === currentIndex,
+                monthlySavings: null, annualSavings: null, savingsPercentage: null
             };
         });
         const complete = rows.filter(row => row.monthly !== null);
-        const comparisonAvailable = complete.length >= 2;
         const lowestMonthly = complete.length ? Math.min(...complete.map(row => row.monthly)) : null;
-        const zeroBase = comparisonAvailable && lowestMonthly === 0;
+        const referenceMonthly = currentIndex === null ? lowestMonthly : rows[currentIndex].monthly;
+        const comparisonAvailable = complete.length >= 2 && referenceMonthly !== null;
+        const zeroBase = comparisonAvailable && referenceMonthly === 0;
         if (comparisonAvailable) {
             complete.forEach(row => {
                 row.lowest = row.monthly === lowestMonthly;
-                row.difference = lowestMonthly > 0 ? (row.monthly - lowestMonthly) / lowestMonthly * 100
-                    : row.lowest ? 0 : null;
+                row.difference = referenceMonthly > 0 ? (row.monthly - referenceMonthly) / referenceMonthly * 100
+                    : row.monthly === referenceMonthly ? 0 : null;
+                if (currentIndex !== null) {
+                    row.monthlySavings = roundMoney(referenceMonthly - row.monthly);
+                    row.annualSavings = roundMoney(rows[currentIndex].annual - row.annual);
+                    row.savingsPercentage = row.difference === null ? null : -row.difference || 0;
+                }
             });
         }
-        return { rows, errors, validCount: complete.length, comparisonAvailable, lowestMonthly, zeroBase };
+        return { rows, errors, validCount: complete.length, comparisonAvailable, lowestMonthly, zeroBase, currentIndex, referenceMonthly };
     }
 
     function normalizeCompanies(names) {

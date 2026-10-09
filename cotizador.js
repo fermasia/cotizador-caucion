@@ -196,6 +196,8 @@ const alicuotas_impuesto_sellos = {
 if (!cotizadorData.sellados) {
     cotizadorData.sellados = alicuotas_impuesto_sellos;
 }
+// Copia de la configuración publicada, sin cambios pendientes en los editores.
+let caucionBackupDefaults = JSON.parse(JSON.stringify(cotizadorData));
 
 // Inicializar el cotizador cuando se carga la página
 document.addEventListener('DOMContentLoaded', function() {
@@ -242,6 +244,7 @@ async function loadCotizadorData() {
         // Verificar que los datos tengan la estructura correcta
         if (data && data.companias && data.impuestos && data.periodicidad) {
             cotizadorData = data;
+            caucionBackupDefaults = { ...caucionBackupDefaults, ...JSON.parse(JSON.stringify(data)) };
             console.log('Datos del cotizador cargados correctamente desde JSON');
         } else {
             console.warn('Estructura de datos incorrecta en el archivo JSON, usando datos predeterminados');
@@ -250,6 +253,9 @@ async function loadCotizadorData() {
         console.warn('Error al cargar los datos del cotizador desde JSON, usando datos predeterminados:', error);
     }
     
+    // Los maestros guardados tienen prioridad sobre los valores de una nueva publicación.
+    loadDataFromLocalStorage();
+
     // Cargar las compañías en el selector
     loadCompaniesIntoSelector();
 
@@ -268,7 +274,7 @@ function loadCompaniesIntoSelector() {
     const companySelect = document.getElementById('company');
     
     // Limpiar opciones existentes
-    companySelect.innerHTML = '<option value="">Seleccione una compañía</option>';
+    companySelect.innerHTML = '<option value="">Elegí una compañía</option>';
     
     // Agregar las compañías
     cotizadorData.companias.forEach(compania => {
@@ -521,7 +527,7 @@ async function toggleExchangeRate() {
             console.error(`Error al obtener el tipo de cambio para ${currency}:`, error);
             exchangeRateContainer.classList.add('warning');
         } finally {
-            exchangeRateInput.placeholder = 'Ingrese el tipo de cambio';
+            exchangeRateInput.placeholder = 'Ingresá el tipo de cambio';
         }
     }
     
@@ -1528,7 +1534,7 @@ document.addEventListener('DOMContentLoaded', function() {
 // Función para cargar jurisdicciones en el selector
 function loadJurisdictionsIntoSelector() {
     const jurisdictionSelect = document.getElementById('jurisdiction');
-    jurisdictionSelect.innerHTML = '<option value="" disabled selected hidden>Seleccione una jurisdicción</option>';
+    jurisdictionSelect.innerHTML = '<option value="" disabled selected hidden>Elegí una jurisdicción</option>';
     
     Object.keys(cotizadorData.sellados).sort().forEach(jurisdiccion => {
         const option = document.createElement('option');
@@ -1681,7 +1687,7 @@ document.getElementById('notary-type').addEventListener('change', initializeFiel
 function loadRisksIntoSelector() {
     const riskSelect = document.getElementById('risk-type');
     const currentValue = riskSelect.value;
-    riskSelect.innerHTML = '<option value="" disabled selected hidden>Seleccione un riesgo</option>';
+    riskSelect.innerHTML = '<option value="" disabled selected hidden>Elegí un riesgo</option>';
     cotizadorData.riesgos.forEach(riesgo => {
         const option = document.createElement('option');
         option.value = riesgo;
@@ -1754,7 +1760,7 @@ function loadDocTypesIntoSelector() {
         const select = document.getElementById(id);
         if (!select) return;
         const current = select.value;
-        select.innerHTML = '<option value="" disabled selected hidden>Seleccione...</option>';
+        select.innerHTML = '<option value="" disabled selected hidden>Elegí una opción</option>';
         cotizadorData.tiposDocumento.forEach(tipo => {
             const opt = document.createElement('option');
             opt.value = tipo.nombre;

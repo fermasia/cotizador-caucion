@@ -6,6 +6,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const suggestions = document.getElementById('art-company-options');
     const comparisonNote = document.getElementById('art-comparison-note');
     const companyStatus = document.getElementById('art-company-status');
+    const resetReference = document.getElementById('art-reset-reference');
     const modal = document.getElementById('art-companies-modal');
     const companyRows = document.getElementById('art-companies-rows');
     const companyError = document.getElementById('art-companies-error');
@@ -18,6 +19,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const percentage = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 2 });
     const touched = new Set();
     const cards = [];
+    let currentQuoteIndex = null;
     let companyDraft = [];
     let previousFocus;
 
@@ -58,12 +60,18 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function updateQuotes() {
         const activeCount = Number(count.value);
+        // Una tarjeta oculta no puede seguir siendo la referencia de la comparación.
+        if (activeCount === 1 || (currentQuoteIndex !== null && currentQuoteIndex >= activeCount)) currentQuoteIndex = null;
+        resetReference.hidden = currentQuoteIndex === null;
         const result = ArtQuotes.calculate(capitas.value, payroll.value,
-            cards.slice(0, activeCount).map(card => ({ company: card.company.input.value, rate: card.rate.input.value })));
+            cards.slice(0, activeCount).map(card => ({ company: card.company.input.value, rate: card.rate.input.value })), currentQuoteIndex);
         showError(capitas, document.getElementById('art-capitas-error'), result.errors.capitas);
         showError(payroll, document.getElementById('art-payroll-error'), result.errors.payroll);
         cards.forEach((card, index) => {
             card.element.hidden = index >= activeCount;
+            card.currentOption.hidden = activeCount === 1;
+            card.currentInput.checked = index === currentQuoteIndex;
+            card.element.classList.toggle('is-current', index === currentQuoteIndex);
             const row = result.rows[index];
             if (!row) return;
             showError(card.company.input, card.company.error, row.errors.company);
@@ -73,14 +81,30 @@ document.addEventListener('DOMContentLoaded', function () {
             }
             card.element.classList.toggle('is-lowest', row.lowest);
             card.comparison.hidden = !result.comparisonAvailable || row.monthly === null;
-            card.comparison.textContent = row.lowest ? 'Menor prima mensual · 0% de diferencia'
-                : row.difference === null ? 'Sin porcentaje de comparación: la menor prima es $0.'
+            card.comparison.classList.toggle('has-savings', row.monthlySavings > 0);
+            card.comparison.classList.toggle('has-extra-cost', row.monthlySavings < 0);
+            if (currentQuoteIndex !== null) {
+                const percent = row.savingsPercentage === null ? 'Porcentaje no calculable: el costo actual es $0.'
+                    : `${percentage.format(Math.abs(row.savingsPercentage))}% ${row.monthlySavings < 0 ? 'más que' : 'de ahorro frente a'} la actual`;
+                card.comparison.textContent = row.current ? 'Referencia · costo actual del cliente'
+                    : row.monthlySavings === 0 ? 'Sin ahorro · mismo costo que la actual'
+                        : `${row.monthlySavings > 0 ? 'Ahorro' : 'Costo adicional'}: ${money.format(Math.abs(row.monthlySavings))}/mes\n${money.format(Math.abs(row.annualSavings))}/año · ${percent}`;
+            } else {
+                card.comparison.textContent = row.lowest ? 'Menor prima mensual · 0% de diferencia'
+                    : row.difference === null ? 'Sin porcentaje de comparación: la menor prima es $0.'
                     : `+${percentage.format(row.difference)}% respecto de la menor prima mensual`;
+            }
         });
         comparisonNote.hidden = activeCount === 1;
-        comparisonNote.textContent = !result.comparisonAvailable ? 'Completá al menos dos cotizaciones para comparar sus primas.'
-            : result.zeroBase ? 'La menor prima es $0. Las alternativas con prima positiva no tienen una diferencia porcentual calculable.'
+        if (currentQuoteIndex !== null) {
+            comparisonNote.textContent = result.referenceMonthly === null ? 'Completá la cotización actual y los datos de cápitas y masa salarial para calcular los ahorros.'
+                : !result.comparisonAvailable ? 'Completá al menos una propuesta para compararla con la cotización actual.'
+                    : `Referencia: cotización ${currentQuoteIndex + 1} · ${result.rows[currentQuoteIndex].company} · ${money.format(result.referenceMonthly)}/mes. Los ahorros se calculan con la misma masa salarial y cápitas.${result.zeroBase ? ' El costo actual es $0; se comparan importes sin calcular porcentajes para propuestas con costo positivo.' : ''}`;
+        } else {
+            comparisonNote.textContent = !result.comparisonAvailable ? 'Completá al menos dos cotizaciones para comparar sus primas.'
+                : result.zeroBase ? 'La menor prima es $0. Las alternativas con prima positiva no tienen una diferencia porcentual calculable.'
                 : `Se comparan ${result.validCount} cotizaciones completas. Las diferencias se calculan respecto de la menor prima mensual (${money.format(result.lowestMonthly)}).`;
+        }
     }
 
     for (let index = 0; index < 5; index++) {
@@ -90,6 +114,20 @@ document.addEventListener('DOMContentLoaded', function () {
         heading.id = `art-quote-title-${number}`;
         card.setAttribute('aria-labelledby', heading.id);
         card.appendChild(heading);
+        const currentOption = makeElement('label', 'art-current-option');
+        const currentInput = makeElement('input');
+        currentInput.id = `art-quote-current-${number}`;
+        currentInput.type = 'radio';
+        currentInput.name = 'art-current-quote';
+        currentInput.value = String(index);
+        currentInput.setAttribute('aria-label', `Actual del cliente · cotización ${number}`);
+        currentOption.append(currentInput, makeElement('span', '', 'Actual del cliente'));
+        card.appendChild(currentOption);
+        currentInput.addEventListener('change', () => {
+            if (!currentInput.checked) return;
+            currentQuoteIndex = index;
+            updateQuotes();
+        });
         const company = field(card, `art-quote-company-${number}`, 'Compañía ART:', 'text');
         company.input.setAttribute('list', 'art-company-options');
         company.input.placeholder = 'Elegí una compañía o escribí su nombre';
@@ -116,13 +154,62 @@ document.addEventListener('DOMContentLoaded', function () {
         const comparison = makeElement('p', 'art-quote-comparison');
         card.append(metrics, comparison);
         cardsContainer.appendChild(card);
-        cards.push({ element: card, company, rate, outputs, comparison });
+        cards.push({ element: card, company, rate, outputs, comparison, currentInput, currentOption });
         watch(company.input);
         watch(rate.input);
     }
     watch(capitas);
     watch(payroll);
     count.addEventListener('change', updateQuotes);
+    resetReference.addEventListener('click', () => {
+        currentQuoteIndex = null;
+        updateQuotes();
+    });
+
+    const exportButton = document.getElementById('art-export-pdf-btn');
+    const exportStatus = document.getElementById('art-pdf-status');
+    let exportErrors = [];
+    exportButton.addEventListener('click', () => {
+        exportErrors.forEach(error => document.getElementById(error.id).removeAttribute('aria-invalid'));
+        exportErrors = [];
+        exportStatus.textContent = '';
+        updateQuotes();
+        const activity = document.getElementById('art-ciiu');
+        const report = ArtPDF.prepare({
+            takerName: document.getElementById('art-taker-name').value,
+            docType: document.getElementById('art-doc-type').value,
+            docNumber: document.getElementById('art-doc-number').value,
+            activityCode: activity.value,
+            activityDescription: activity.value ? (activity.selectedOptions?.[0]?.textContent ?? '').slice(activity.value.length + 3) : '',
+            capitas: capitas.value, payroll: payroll.value, currentIndex: currentQuoteIndex,
+            quotes: cards.slice(0, Number(count.value)).map(card => ({ company: card.company.input.value, rate: card.rate.input.value }))
+        }, validateDocNumber);
+        if (report.errors.length) {
+            exportErrors = report.errors;
+            exportErrors.forEach(error => document.getElementById(error.id).setAttribute('aria-invalid', 'true'));
+            exportStatus.textContent = `${report.errors[0].message} Revisá los campos marcados antes de exportar.`;
+            document.getElementById(report.errors[0].id).focus();
+            return;
+        }
+        if (!window.jspdf?.jsPDF) {
+            exportStatus.textContent = 'No se pudo cargar la biblioteca de PDF. Revisá tu conexión y recargá la página para reintentar.';
+            return;
+        }
+        exportButton.disabled = true;
+        try {
+            const { doc, filename } = ArtPDF.build(report, {
+                jsPDF: window.jspdf.jsPDF,
+                logo: typeof logoDataUrl === 'string' ? logoDataUrl : null
+            });
+            doc.save(filename);
+            exportStatus.textContent = 'PDF generado con los datos y las cotizaciones visibles.';
+        } catch (error) {
+            console.error('Error al generar PDF de ART:', error);
+            exportStatus.textContent = 'No se pudo generar el PDF. Revisá tu conexión y volvé a intentar.';
+        } finally {
+            exportButton.disabled = false;
+        }
+    });
 
     function updateCompanies() {
         suggestions.replaceChildren();

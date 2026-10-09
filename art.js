@@ -33,7 +33,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const selected = activitySelect.value;
         const rows = store.getActivities();
         const visible = rows.filter(row => row.codigo === selected || matches(row, search.value));
-        activitySelect.replaceChildren(new Option(visible.length ? 'Seleccione una actividad' : 'No se encontraron actividades', ''));
+        activitySelect.replaceChildren(new Option(visible.length ? 'Elegí una actividad' : 'No se encontraron actividades', ''));
         visible.forEach(row => activitySelect.add(new Option(`${row.codigo} — ${row.descripcion}`, row.codigo)));
         if (rows.some(row => row.codigo === selected)) activitySelect.value = selected;
         updateDescription();
